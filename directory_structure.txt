@@ -1,0 +1,49 @@
+ai-bot-testing-framework/
+├── __init__.py
+├── config.example.yaml                # Example configuration template
+├── config.yaml                        # Configuration with API keys and settings
+├── requirements.txt                   # Python dependencies
+├── memory.md                          # Memory and context notes
+├── instructions.md                    # Custom instructions and rules
+├── README.md                          # Project documentation
+├── SETUP.md                           # Setup instructions
+├── run_eval.py                        # Evaluation runner entry point
+├── run_diabetes_demo.py               # Diabetes bot demonstration runner
+│
+├── test_cases/
+│   ├── diabetes_tests.csv             # Diabetes domain test cases
+│   └── sample.csv                     # Sample test cases
+│
+├── connectors/
+│   ├── __init__.py
+│   ├── bot_connector.py               # Base bot connector class
+│   └── diabetes_bot.py                # Diabetes bot implementation
+│
+├── evaluators/
+│   ├── __init__.py
+│   ├── base.py                        # BaseEvaluator + token usage tracking
+│   ├── loader.py                      # Evaluator loading utilities
+│   ├── quality.py                     # Relevance, coherence, accuracy evaluators
+│   ├── safety.py                      # Safety and hallucination evaluators
+│   ├── rag.py                         # Faithfulness and grounding evaluators
+│   └── refusal.py                     # Refusal and over-refusal evaluators
+│
+├── knowledge_base/
+│   └── diabetes_kb.md                 # Diabetes domain knowledge base
+│
+├── plugins/
+│   └── example_sentiment_eval.py       # Example sentiment evaluation plugin
+│
+├── reporter/
+│   ├── __init__.py
+│   ├── html_reporter.py               # HTML report generation
+│   └── comparison.py                  # Comparison report utilities
+│
+├── utils/
+│   ├── __init__.py
+│   ├── cache.py                       # Caching utilities
+│   └── cost.py                        # Cost calculation and token tracking
+│
+└── outputs/
+    └── cache/
+        └── evaluation_cache.json       # Cached evaluation data
