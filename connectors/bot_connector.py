@@ -1,5 +1,7 @@
+import time
 from abc import ABC, abstractmethod
 import requests
+
 
 class BotConnector(ABC):
     """Abstract base class. Implement this to connect your real bot."""
@@ -7,6 +9,13 @@ class BotConnector(ABC):
     @abstractmethod
     def get_response(self, user_input: str, context: str = "") -> str:
         pass
+
+    def get_response_timed(self, user_input: str, context: str = "") -> tuple:
+        """Returns (response_text, latency_ms). Times the underlying get_response() call."""
+        start = time.perf_counter()
+        response = self.get_response(user_input, context)
+        latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        return response, latency_ms
 
 
 class MockBotConnector(BotConnector):
