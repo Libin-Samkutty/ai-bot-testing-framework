@@ -5,6 +5,8 @@ openai:
 evaluation:
   temperature: 0.0              # Keep judge deterministic
   max_tokens: 512
+  max_retries: 3                # Retry failed API calls (exponential backoff: 1s, 2s, 4s)
+  backoff_base: 2.0             # Base for backoff: wait = backoff_base ^ attempt
 
 output:
   reports_dir: "outputs"
