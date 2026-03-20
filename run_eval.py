@@ -447,13 +447,14 @@ async def run(
     async def evaluate_one(tc: dict) -> dict:
         async with semaphore:
             # Bot call with latency timing (Feature 4) — now async with optional caching
-            bot_response, latency_ms = await bot.async_get_response_timed_cached(
+            bot_response, latency_ms, bot_response_cached = await bot.async_get_response_timed_cached(
                 tc["input"],
                 tc.get("context", ""),
                 cache_enabled=cache_bot_responses,
                 cache_dir=cache_dir,
             )
             tc["bot_response"] = bot_response
+            tc["bot_response_cached"] = bot_response_cached
 
             metrics = {}
             had_cache_hit = False
@@ -482,6 +483,7 @@ async def run(
                 "expected_output": tc.get("expected_output", "").strip(),
                 "bot_response": bot_response,
                 "latency_ms":   latency_ms,
+                "bot_response_cached": bot_response_cached,
                 "severity":     tc.get("severity", "").strip(),
                 "notes":        tc.get("notes", "").strip(),
                 "metrics":      metrics,
