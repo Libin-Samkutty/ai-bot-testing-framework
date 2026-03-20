@@ -187,3 +187,56 @@ class GeminiConnector(BotConnector):
         except Exception as exc:
             logger.error("Gemini API error for input %r: %s", user_input[:80], exc)
             raise RuntimeError(f"Gemini API error: {exc}") from exc
+
+    async def async_get_response(self, user_input: str, context: str = "") -> str:
+        """
+        Async version using Vertex AI's async API.
+        Send user_input to Gemini and return the raw response text.
+
+        Parameters
+        ----------
+        user_input : str
+            The user's message / prompt.
+        context : str
+            Optional additional context. Appended to user_input when non-empty.
+
+        Returns
+        -------
+        str
+            Raw response text from Gemini (markdown fences stripped).
+        """
+        from vertexai.generative_models import GenerativeModel, GenerationConfig
+
+        self._init_vertexai()
+
+        gen_config = GenerationConfig(
+            temperature=self.temperature,
+            top_p=self.top_p,
+            top_k=self.top_k,
+            max_output_tokens=self.max_output_tokens,
+        )
+
+        model_kwargs = {}
+        if self.system_prompt:
+            model_kwargs["system_instruction"] = self.system_prompt
+
+        model = GenerativeModel(self.model_name, **model_kwargs)
+
+        prompt = f"{user_input}\n\n{context}".strip() if context else user_input
+
+        try:
+            response = await model.generate_content_async(prompt, generation_config=gen_config)
+            raw = response.text.strip()
+
+            # Strip markdown code fences that Gemini occasionally wraps around JSON
+            if raw.startswith("```"):
+                lines = raw.splitlines()
+                raw = "\n".join(
+                    line for line in lines if not line.strip().startswith("```")
+                ).strip()
+
+            return raw
+
+        except Exception as exc:
+            logger.error("Gemini API error for input %r: %s", user_input[:80], exc)
+            raise RuntimeError(f"Gemini API error: {exc}") from exc
