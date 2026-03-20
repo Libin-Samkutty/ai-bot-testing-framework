@@ -473,6 +473,7 @@ async def run(
             return {
                 "test_id":      tc["test_id"],
                 "input":        tc["input"],
+                "expected_output": tc.get("expected_output", "").strip(),
                 "bot_response": bot_response,
                 "latency_ms":   latency_ms,
                 "severity":     tc.get("severity", "").strip(),
