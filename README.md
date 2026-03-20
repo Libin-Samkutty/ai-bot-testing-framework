@@ -165,7 +165,13 @@ python run_eval.py --csv test_cases/sample.csv --severity critical --eval-types 
 echo "Exit code: $?"  # 0 = all passed, 1 = failures detected
 ```
 
-### Example 7: Full advanced workflow
+### Example 7: Use custom evaluators
+```bash
+python run_eval.py --csv test_cases/sample.csv --custom-eval-dir ./plugins
+```
+Run with your custom evaluation rules (e.g., company policies, tone checks)
+
+### Example 8: Full advanced workflow
 ```bash
 python run_eval.py \
   --csv test_cases/sample.csv \
@@ -735,6 +741,23 @@ outputs/
 
 ### Q: How does the checklist-based evaluation differ from the old approach?
 **A:** Each metric now has 4–5 explicit boolean criteria. The judge checks each one individually. If **any** criterion fails, the metric is FAIL. The `reason` field in the report lists exactly which criteria failed — not just a vague "the answer was incomplete." This makes failures actionable.
+
+### Q: Can I create my own evaluation rules?
+**A:** Yes! Create custom evaluators in the `plugins/` directory (see the "Advanced Features" section for examples).
+
+### Q: How do I track improvements over time?
+**A:** Use comparison reports (`--compare` flag). Each run is saved, so you can compare any two runs to see progress.
+
+### Q: Do I need to be technical to use this?
+**A:** Mostly no! You need to:
+- ✅ Create a CSV file with test questions (easy in Excel)
+- ✅ Copy your API key to config.yaml (one-time setup)
+- ✅ Run a command (one line)
+
+For custom evaluators, you'll need basic Python, but we provide templates.
+
+### Q: What happens if my bot crashes?
+**A:** The tool catches errors and marks them as "ERROR" in the report instead of crashing. You'll see what went wrong.
 
 ### Q: Can I export the results?
 **A:** Results are saved as:

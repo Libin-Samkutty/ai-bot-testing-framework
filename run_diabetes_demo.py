@@ -23,6 +23,7 @@ Features:
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -56,6 +57,21 @@ REQUIRED_CSV_COLUMNS = {"test_id", "input", "eval_types"}
 KNOWN_EVAL_TYPES = {"quality", "safety", "rag", "refusal"}
 VALID_SEVERITIES = {"Critical", "Major", "Minor", ""}
 PLACEHOLDER_KEY = "sk-your-key-here"
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def _compute_prompt_hash(evaluator, eval_type: str) -> str:
+    """Compute hash of evaluator's prompt configuration.
+
+    This ensures cache invalidation when evaluator prompt, memory, or instructions change.
+    """
+    # Combine all prompt-affecting configuration
+    prompt_config = f"{eval_type}|{evaluator.instructions}|{evaluator.memory}|{evaluator.model}|{evaluator.temperature}"
+    return hashlib.sha256(prompt_config.encode()).hexdigest()
+
+# ─────────────────────────────────────────────
 
 # ─────────────────────────────────────────────
 # Loaders
@@ -342,14 +358,15 @@ def run(
         for eval_type in tc["eval_types"]:
             if eval_type in evaluators:
                 # Check cache first
-                cached_result, timestamp = cache.get(tc["test_id"], eval_type, tc["bot_response"])
+                prompt_hash = _compute_prompt_hash(evaluators[eval_type], eval_type)
+                cached_result, timestamp = cache.get(tc["test_id"], eval_type, tc["bot_response"], prompt_hash)
                 if cached_result:
                     result = cached_result
                     cache_hits += 1
                     print(f"    ✓ {eval_type} (cached)")
                 else:
                     result = evaluators[eval_type].evaluate(tc)
-                    cache.set(tc["test_id"], eval_type, tc["bot_response"], result)
+                    cache.set(tc["test_id"], eval_type, tc["bot_response"], result, prompt_hash)
                 metrics.update(result)
             else:
                 print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")

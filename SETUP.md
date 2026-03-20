@@ -95,6 +95,51 @@ python run_diabetes_demo.py --csv test_cases/diabetes_tests.csv
 | `evaluation` | `max_tokens` | Max response length (512 is usually enough) |
 | `output` | `reports_dir` | Where to save reports (default: outputs) |
 | `pricing` | `<model>` | Token prices in USD per 1M tokens |
+| `gcp` | `project_id` | GCP project for Vertex AI (GeminiConnector only) |
+| `gcp` | `location` | Vertex AI region, e.g. `us-central1` (GeminiConnector only) |
+| `gcp` | `service_account_path` | Path to GCP service account JSON (GeminiConnector only) |
+| `gemini` | `model` | Gemini model ID, e.g. `gemini-2.5-flash` (GeminiConnector only) |
+| `gemini` | `temperature` / `top_p` / `top_k` | Gemini generation parameters (GeminiConnector only) |
+| `system_prompt_path` | _(top-level)_ | Path to a `.txt` file used as the bot's system prompt |
+
+---
+
+### Using a `prompts/` directory
+
+For bots whose behaviour is driven by a system prompt (e.g. Gemini classification
+bots), keep the prompt in a plain `.txt` file instead of hard-coding it in Python:
+
+```
+your-project/
+├── prompts/
+│   └── my_bot_system_prompt.txt   ← system prompt lives here
+├── connectors/
+│   └── my_bot_connector.py
+└── config.yaml
+```
+
+Then reference it in `config.yaml`:
+
+```yaml
+system_prompt_path: "prompts/my_bot_system_prompt.txt"
+```
+
+Or pass `prompt_path=` directly to `GeminiConnector`:
+
+```python
+from connectors.gemini_connector import GeminiConnector
+
+bot = GeminiConnector(
+    project_id="my-gcp-project",
+    prompt_path="prompts/my_bot_system_prompt.txt",
+)
+```
+
+**Benefits:**
+- Prompt changes don't require code edits
+- The evaluation cache is automatically invalidated when the prompt file changes
+  (the cache key includes the evaluator's `instructions`, `memory`, model, and temperature)
+- Prompts can be reviewed / diffed in version control like any other file
 
 ### Why Not Track config.yaml?
 

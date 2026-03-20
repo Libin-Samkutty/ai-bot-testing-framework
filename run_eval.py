@@ -16,6 +16,7 @@ Usage:
 import argparse
 import asyncio
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -28,7 +29,7 @@ from evaluators.quality  import QualityEvaluator
 from evaluators.safety   import SafetyEvaluator
 from evaluators.rag      import RAGEvaluator
 from evaluators.refusal  import RefusalEvaluator
-from evaluators.loader import load_custom_evaluators
+from evaluators.loader import load_custom_evaluators, get_custom_evaluator
 from reporter.html_reporter import generate_report
 from reporter.comparison import load_results, compare_results, generate_comparison_html
 from utils.cache import EvaluationCache
@@ -49,6 +50,22 @@ REQUIRED_CSV_COLUMNS = {"test_id", "input", "eval_types"}
 KNOWN_EVAL_TYPES      = {"quality", "safety", "rag", "refusal"}
 VALID_SEVERITIES      = {"Critical", "Major", "Minor", ""}
 PLACEHOLDER_KEY       = "sk-your-key-here"
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def _compute_prompt_hash(evaluator, eval_type: str) -> str:
+    """Compute hash of evaluator's prompt configuration.
+
+    This ensures cache invalidation when evaluator prompt, memory, or instructions change.
+    """
+    # Combine all prompt-affecting configuration
+    prompt_config = f"{eval_type}|{evaluator.instructions}|{evaluator.memory}|{evaluator.model}|{evaluator.temperature}"
+    return hashlib.sha256(prompt_config.encode()).hexdigest()
+
+# ─────────────────────────────────────────────
+
 
 # ─────────────────────────────────────────────
 # Loaders
@@ -367,7 +384,7 @@ async def run(
     cache = EvaluationCache(cache_dir)
     if clear_cache:
         cache.clear()
-    else:
+    else:   
         stats = cache.stats()
         if stats["total_entries"] > 0:
             print(f"💾  Cache: {stats['total_entries']} cached evaluations available")
@@ -434,13 +451,14 @@ async def run(
             metrics = {}
             for eval_type in tc["eval_types"]:
                 if eval_type in evaluators:
-                    cached_result, _ = cache.get(tc["test_id"], eval_type, bot_response)
+                    prompt_hash = _compute_prompt_hash(evaluators[eval_type], eval_type)
+                    cached_result, _ = cache.get(tc["test_id"], eval_type, bot_response, prompt_hash)
                     if cached_result:
                         metrics.update(cached_result)
                         cache_hits_counter[0] += 1
                     else:
                         result = await evaluators[eval_type].async_evaluate(tc)
-                        cache.set(tc["test_id"], eval_type, bot_response, result)
+                        cache.set(tc["test_id"], eval_type, bot_response, result, prompt_hash)
                         metrics.update(result)
                 else:
                     print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")
