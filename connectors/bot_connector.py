@@ -2,6 +2,7 @@ import time
 import asyncio
 from abc import ABC, abstractmethod
 import requests
+from utils.bot_cache import BotResponseCache
 
 
 class BotConnector(ABC):
@@ -30,6 +31,45 @@ class BotConnector(ABC):
         response = await self.async_get_response(user_input, context)
         latency_ms = round((time.perf_counter() - start) * 1000, 1)
         return response, latency_ms
+
+    async def async_get_response_timed_cached(
+        self, user_input: str, context: str = "", cache_enabled: bool = True, cache_dir: str = "outputs/cache"
+    ) -> tuple:
+        """
+        Async version with optional caching.
+        Returns (response_text, latency_ms).
+
+        Parameters
+        ----------
+        user_input : str
+            User's message/prompt
+        context : str
+            Optional context
+        cache_enabled : bool
+            Whether to use cache (default: True)
+        cache_dir : str
+            Cache directory path (default: outputs/cache)
+        """
+        if not cache_enabled:
+            return await self.async_get_response_timed(user_input, context)
+
+        # Try cache first
+        cache = BotResponseCache(cache_dir)
+        model_params = self._get_model_params()
+        system_prompt = getattr(self, "system_prompt", "")
+
+        cached_response = cache.get(user_input, context, model_params, system_prompt)
+        if cached_response:
+            return cached_response, 0.0  # Return cached response with 0ms latency
+
+        # Not in cache, call API and cache result
+        response, latency_ms = await self.async_get_response_timed(user_input, context)
+        cache.set(user_input, context, model_params, response, system_prompt)
+        return response, latency_ms
+
+    def _get_model_params(self) -> dict:
+        """Get model parameters for cache key. Override in subclasses."""
+        return {}
 
 
 class MockBotConnector(BotConnector):
