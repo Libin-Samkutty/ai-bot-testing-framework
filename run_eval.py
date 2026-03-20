@@ -362,6 +362,7 @@ async def run(
     custom_eval_dir: str = None,
     cache_dir: str = "outputs/cache",
     clear_cache: bool = False,
+    cache_bot_responses: bool = True,
     compare_run: str = None,
     max_concurrency: int = 10,
     min_pass_rate: float = None,
@@ -445,8 +446,13 @@ async def run(
 
     async def evaluate_one(tc: dict) -> dict:
         async with semaphore:
-            # Bot call with latency timing (Feature 4) — now async
-            bot_response, latency_ms = await bot.async_get_response_timed(tc["input"], tc.get("context", ""))
+            # Bot call with latency timing (Feature 4) — now async with optional caching
+            bot_response, latency_ms = await bot.async_get_response_timed_cached(
+                tc["input"],
+                tc.get("context", ""),
+                cache_enabled=cache_bot_responses,
+                cache_dir=cache_dir,
+            )
             tc["bot_response"] = bot_response
 
             metrics = {}
@@ -473,6 +479,7 @@ async def run(
             return {
                 "test_id":      tc["test_id"],
                 "input":        tc["input"],
+                "expected_output": tc.get("expected_output", "").strip(),
                 "bot_response": bot_response,
                 "latency_ms":   latency_ms,
                 "severity":     tc.get("severity", "").strip(),

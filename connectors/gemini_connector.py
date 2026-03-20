@@ -108,6 +108,16 @@ class GeminiConnector(BotConnector):
 
         self._initialized = False
 
+    def _get_model_params(self) -> dict:
+        """Return model parameters for cache key generation."""
+        return {
+            "model_name": self.model_name,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "max_output_tokens": self.max_output_tokens,
+        }
+
     def _init_vertexai(self):
         """Lazy-initialise Vertex AI SDK. Runs once before the first API call."""
         if self._initialized:
