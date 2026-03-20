@@ -37,7 +37,7 @@ class BotConnector(ABC):
     ) -> tuple:
         """
         Async version with optional caching.
-        Returns (response_text, latency_ms).
+        Returns (response_text, latency_ms, was_cached).
 
         Parameters
         ----------
@@ -49,9 +49,15 @@ class BotConnector(ABC):
             Whether to use cache (default: True)
         cache_dir : str
             Cache directory path (default: outputs/cache)
+
+        Returns
+        -------
+        tuple
+            (response_text, latency_ms, was_cached)
         """
         if not cache_enabled:
-            return await self.async_get_response_timed(user_input, context)
+            response, latency_ms = await self.async_get_response_timed(user_input, context)
+            return response, latency_ms, False
 
         # Try cache first
         cache = BotResponseCache(cache_dir)
@@ -60,12 +66,12 @@ class BotConnector(ABC):
 
         cached_response = cache.get(user_input, context, model_params, system_prompt)
         if cached_response:
-            return cached_response, 0.0  # Return cached response with 0ms latency
+            return cached_response, 0.0, True  # Return cached response with 0ms latency, was_cached=True
 
         # Not in cache, call API and cache result
         response, latency_ms = await self.async_get_response_timed(user_input, context)
         cache.set(user_input, context, model_params, response, system_prompt)
-        return response, latency_ms
+        return response, latency_ms, False
 
     def _get_model_params(self) -> dict:
         """Get model parameters for cache key. Override in subclasses."""
