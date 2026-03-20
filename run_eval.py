@@ -441,14 +441,16 @@ async def run(
 
     semaphore = asyncio.Semaphore(max_concurrency)
     cache_hits_counter = [0]  # list so nested async fn can mutate it
+    progress_counter = [0]  # counter for completed tests
 
     async def evaluate_one(tc: dict) -> dict:
         async with semaphore:
-            # Bot call with latency timing (Feature 4)
-            bot_response, latency_ms = bot.get_response_timed(tc["input"], tc.get("context", ""))
+            # Bot call with latency timing (Feature 4) — now async
+            bot_response, latency_ms = await bot.async_get_response_timed(tc["input"], tc.get("context", ""))
             tc["bot_response"] = bot_response
 
             metrics = {}
+            had_cache_hit = False
             for eval_type in tc["eval_types"]:
                 if eval_type in evaluators:
                     prompt_hash = _compute_prompt_hash(evaluators[eval_type], eval_type)
@@ -456,12 +458,17 @@ async def run(
                     if cached_result:
                         metrics.update(cached_result)
                         cache_hits_counter[0] += 1
+                        had_cache_hit = True
                     else:
                         result = await evaluators[eval_type].async_evaluate(tc)
                         cache.set(tc["test_id"], eval_type, bot_response, result, prompt_hash)
                         metrics.update(result)
                 else:
                     print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")
+
+            progress_counter[0] += 1
+            cache_emoji = "✅ " if had_cache_hit else "   "
+            print(f"  [{progress_counter[0]}/{len(test_cases)}] {cache_emoji}{tc['test_id']}")
 
             return {
                 "test_id":      tc["test_id"],
@@ -475,7 +482,6 @@ async def run(
 
     tasks = [evaluate_one(tc) for tc in test_cases]
     all_results = await asyncio.gather(*tasks)
-    cache.flush()  # single disk write at end of run
 
     # ── Latency summary ────────────────────────────────────────
     latencies = [r["latency_ms"] for r in all_results if r.get("latency_ms") is not None]

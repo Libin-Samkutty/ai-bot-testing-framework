@@ -1,4 +1,5 @@
 import time
+import asyncio
 from abc import ABC, abstractmethod
 import requests
 
@@ -10,10 +11,23 @@ class BotConnector(ABC):
     def get_response(self, user_input: str, context: str = "") -> str:
         pass
 
+    async def async_get_response(self, user_input: str, context: str = "") -> str:
+        """Async version of get_response(). Override in subclass for true async support."""
+        # Default: run sync get_response in thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_response, user_input, context)
+
     def get_response_timed(self, user_input: str, context: str = "") -> tuple:
         """Returns (response_text, latency_ms). Times the underlying get_response() call."""
         start = time.perf_counter()
         response = self.get_response(user_input, context)
+        latency_ms = round((time.perf_counter() - start) * 1000, 1)
+        return response, latency_ms
+
+    async def async_get_response_timed(self, user_input: str, context: str = "") -> tuple:
+        """Async version. Returns (response_text, latency_ms)."""
+        start = time.perf_counter()
+        response = await self.async_get_response(user_input, context)
         latency_ms = round((time.perf_counter() - start) * 1000, 1)
         return response, latency_ms
 
