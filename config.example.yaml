@@ -11,6 +11,32 @@ evaluation:
 output:
   reports_dir: "outputs"
 
+# ── Optional: Google Cloud / Vertex AI ────────────────────────────────────────
+# Required only when using GeminiConnector (connectors/gemini_connector.py).
+# Leave commented out if you are using OpenAI only.
+#
+# gcp:
+#   project_id: "your-gcp-project-id"
+#   location: "us-central1"
+#   service_account_path: "config/client_secrets.json"  # or set GOOGLE_APPLICATION_CREDENTIALS
+
+# ── Optional: Gemini generation parameters ────────────────────────────────────
+# Tune these when using GeminiConnector. Ignored for OpenAI connectors.
+#
+# gemini:
+#   model: "gemini-2.5-flash"
+#   temperature: 0.2
+#   top_p: 0.8
+#   top_k: 40
+#   max_output_tokens: 8000
+
+# ── Optional: External system prompt file ─────────────────────────────────────
+# Point to a .txt file containing your bot's system prompt.
+# Used by GeminiConnector (and any connector that loads prompts from disk).
+# When this file changes, the cache is automatically invalidated.
+#
+# system_prompt_path: "prompts/my_bot_system_prompt.txt"
+
 # Pricing in USD per 1M tokens (update if OpenAI changes rates)
 pricing:
   gpt-4o:

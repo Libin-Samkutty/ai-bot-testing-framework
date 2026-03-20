@@ -1,3 +1,10 @@
 openai>=1.0.0
 pyyaml>=6.0
 requests
+
+# ── Optional: Google Cloud / Vertex AI (required for GeminiConnector) ─────────
+# Uncomment these if you are using connectors/gemini_connector.py or any
+# subclass of it (e.g. India_MSD/connectors/india_msd_hpv_gemini_connector.py).
+#
+# google-cloud-aiplatform>=1.50.0
+# google-auth>=2.28.0
