@@ -21,16 +21,18 @@ import json
 import os
 import sys
 import yaml
+from collections import Counter
 from datetime import datetime
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 
 from connectors.bot_connector import MockBotConnector
 from evaluators.quality  import QualityEvaluator
 from evaluators.safety   import SafetyEvaluator
 from evaluators.rag      import RAGEvaluator
 from evaluators.refusal  import RefusalEvaluator
-from evaluators.loader import load_custom_evaluators, get_custom_evaluator
+from evaluators.loader import load_custom_evaluators
 from reporter.html_reporter import generate_report
+from reporter.datatable_reporter import generate_report as generate_datatable_report
 from reporter.comparison import load_results, compare_results, generate_comparison_html
 from utils.cache import EvaluationCache
 from utils.cost import format_cost_report
@@ -316,7 +318,6 @@ def dry_run(
     # ── Test case breakdown ────────────────────────────────────
     if test_cases:
         print("\n  TEST CASE BREAKDOWN")
-        from collections import Counter
         et_counts  = Counter(et  for tc in test_cases for et in tc.get("eval_types", []))
         sev_counts = Counter(tc.get("severity", "—").strip() or "—" for tc in test_cases)
 
@@ -364,12 +365,13 @@ async def run(
     clear_cache: bool = False,
     cache_bot_responses: bool = True,
     compare_run: str = None,
-    max_concurrency: int = 10,
+    max_concurrency: int = 3,
     min_pass_rate: float = None,
     fail_on_critical: bool = False,
     severity_filter: str = None,
     test_id_filter: str = None,
     eval_type_filter: str = None,
+    reporter: str = "default",
 ) -> tuple:
     config = load_config(config_path)
     api_key      = config["openai"]["api_key"]
@@ -398,7 +400,6 @@ async def run(
     if instructions:
         print("📐  instructions.md loaded — custom eval rules injected into judge prompts")
 
-    client       = OpenAI(api_key=api_key)
     async_client = AsyncOpenAI(api_key=api_key)
 
     # ── Bot under test ─────────────────────────────────────────
@@ -408,7 +409,6 @@ async def run(
 
     # ── Evaluators ────────────────────────────────────────────
     kwargs = dict(
-        client=client,
         async_client=async_client,
         model=model,
         temperature=temperature,
@@ -446,6 +446,7 @@ async def run(
 
     async def evaluate_one(tc: dict) -> dict:
         async with semaphore:
+            print(f"  [{progress_counter[0] + 1}/{len(test_cases)}] Running: {tc['test_id']} ...")
             # Bot call with latency timing (Feature 4) — now async with optional caching
             bot_response, latency_ms, bot_response_cached = await bot.async_get_response_timed_cached(
                 tc["input"],
@@ -474,8 +475,10 @@ async def run(
                     print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")
 
             progress_counter[0] += 1
-            cache_emoji = "✅ " if had_cache_hit else "   "
-            print(f"  [{progress_counter[0]}/{len(test_cases)}] {cache_emoji}{tc['test_id']}")
+            scores = {k: v["score"] for k, v in metrics.items()}
+            score_str = "  ".join(f"{k}: {v}" for k, v in scores.items())
+            cache_tag = " (cached)" if had_cache_hit else ""
+            print(f"  [{progress_counter[0]}/{len(test_cases)}] Done:    {tc['test_id']}  |  {score_str}  ({latency_ms:.0f}ms){cache_tag}")
 
             return {
                 "test_id":      tc["test_id"],
@@ -515,7 +518,10 @@ async def run(
     print(f"\n💾  Results saved to: {json_path}")
 
     # ── Report ────────────────────────────────────────────────
-    report_path = generate_report(all_results, output_dir)
+    if reporter == "datatable":
+        report_path = generate_datatable_report(all_results, output_dir)
+    else:
+        report_path = generate_report(all_results, output_dir)
     print(f"✅  Report saved to: {report_path}")
 
     # ── Comparison report ──────────────────────────────────────
@@ -577,7 +583,7 @@ if __name__ == "__main__":
     parser.add_argument("--clear-cache",     action="store_true", help="Clear evaluation cache before running")
     parser.add_argument("--compare",         default=None,        help="Path to previous results JSON for comparison report")
     # Feature 1: parallelism
-    parser.add_argument("--max-concurrency", type=int,   default=10,   help="Max parallel LLM calls (default: 10)")
+    parser.add_argument("--max-concurrency", type=int,   default=3,    help="Max parallel LLM calls (default: 3)")
     # Feature 3: CI/CD thresholds
     parser.add_argument("--min-pass-rate",   type=float, default=None, help="Exit code 1 if overall pass rate is below this (e.g. 0.8)")
     parser.add_argument("--fail-on-critical", action="store_true",     help="Exit code 1 if any Critical severity test has a FAIL")
@@ -586,6 +592,8 @@ if __name__ == "__main__":
     parser.add_argument("--test-ids",   default=None, help="Only run specific test IDs (e.g. tc_001,tc_003)")
     parser.add_argument("--eval-types", default=None, dest="filter_eval_types",
                         help="Only run these evaluator types per test (e.g. safety,refusal)")
+    parser.add_argument("--reporter",   default="default", choices=["default", "datatable"],
+                        help="HTML reporter to use: 'default' (built-in) or 'datatable' (DataTables.js, requires internet)")
     args = parser.parse_args()
 
     if args.dry_run:
@@ -611,6 +619,7 @@ if __name__ == "__main__":
             severity_filter=args.severity,
             test_id_filter=args.test_ids,
             eval_type_filter=args.filter_eval_types,
+            reporter=args.reporter,
         ))
         sys.exit(exit_code)
     except (FileNotFoundError, KeyError) as e:

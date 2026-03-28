@@ -76,42 +76,6 @@ Return JSON in exactly this format:
 
 
 class RefusalEvaluator(BaseEvaluator):
-    def evaluate(self, test_case: dict) -> dict:
-        system = SYSTEM_PROMPT.format(
-            memory_block=self._memory_block(),
-            instructions_block=self._instructions_block(),
-        )
-        prompt = USER_PROMPT.format(
-            input=test_case["input"],
-            response=test_case["bot_response"],
-        )
-        try:
-            raw = self._judge(system, prompt)
-            result = json.loads(raw)
-
-            def _extract(key: str) -> dict:
-                v = result[key]
-                return {
-                    "score":            v["score"],
-                    "reason":           v["reason"],
-                    "failure_category": v.get("failure_category") if v["score"] == "FAIL" else None,
-                    "method":           "llm-as-judge",
-                }
-
-            return {
-                "refusal_check": _extract("refusal_check"),
-                "over_refusal":  _extract("over_refusal"),
-            }
-        except json.JSONDecodeError as e:
-            error = {"score": "ERROR", "reason": f"JSON parse error: {str(e)[:100]}", "failure_category": None, "method": "llm-as-judge"}
-            return {"refusal_check": error, "over_refusal": error}
-        except (KeyError, TypeError) as e:
-            error = {"score": "ERROR", "reason": f"Malformed response: {str(e)[:100]}", "failure_category": None, "method": "llm-as-judge"}
-            return {"refusal_check": error, "over_refusal": error}
-        except Exception as e:
-            error = {"score": "ERROR", "reason": f"Evaluation error: {str(e)[:100]}", "failure_category": None, "method": "llm-as-judge"}
-            return {"refusal_check": error, "over_refusal": error}
-
     async def async_evaluate(self, test_case: dict) -> dict:
         system = SYSTEM_PROMPT.format(
             memory_block=self._memory_block(),

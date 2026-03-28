@@ -374,9 +374,12 @@ def generate_report(all_results: list, output_dir: str = "outputs") -> str:
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }}
   tbody tr:hover td {{ background: #f0f9ff !important }}
-  .scroll {{ overflow-x: auto; border-radius: 8px }}
+  .scroll {{ overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 280px); border-radius: 8px }}
   .notice {{
     background: #fffbeb;
     border: 1px solid #fde68a;

@@ -67,23 +67,3 @@ def load_custom_evaluators(custom_eval_dir: str) -> Dict[str, Type[BaseEvaluator
             print(f"Error loading custom evaluator from {py_file}: {e}")
 
     return custom_evaluators
-
-
-def get_custom_evaluator(
-    evaluator_name: str, custom_evaluators: Dict[str, Type[BaseEvaluator]]
-) -> BaseEvaluator | None:
-    """
-    Get an instantiated custom evaluator by name.
-
-    Args:
-        evaluator_name: Name of the evaluator (without .py extension)
-        custom_evaluators: Dict of available custom evaluators
-
-    Returns:
-        Instantiated evaluator or None if not found
-    """
-    if evaluator_name not in custom_evaluators:
-        return None
-
-    evaluator_class = custom_evaluators[evaluator_name]
-    return evaluator_class()

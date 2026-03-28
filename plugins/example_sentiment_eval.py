@@ -38,7 +38,7 @@ Return JSON:
 class SentimentEvaluator(BaseEvaluator):
     """Custom evaluator for tone and empathy."""
 
-    def evaluate(self, test_case: dict) -> dict:
+    async def async_evaluate(self, test_case: dict) -> dict:
         system = SENTIMENT_SYSTEM.format(
             memory_block=self._memory_block(),
             instructions_block=self._instructions_block(),
@@ -49,7 +49,7 @@ class SentimentEvaluator(BaseEvaluator):
         )
 
         try:
-            raw = self._judge(system, prompt)
+            raw = await self._async_judge(system, prompt)
             result = json.loads(raw)
 
             return {
