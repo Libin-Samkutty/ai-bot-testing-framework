@@ -168,6 +168,10 @@ def _build_latency_card(all_results: list) -> str:
 def _metric_cell(data: dict) -> str:
     score = str(data.get("score", "N/A")).upper()
     reason = data.get("reason", "")
+    if isinstance(reason, list):
+        reason = " ".join(str(r) for r in reason)
+    elif not isinstance(reason, str):
+        reason = str(reason)
     fc = data.get("failure_category", "")
     fc_clean = str(fc).lower() not in ("null", "none", "") and fc
 
