@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import time
 from abc import ABC, abstractmethod
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -10,17 +9,15 @@ logger = logging.getLogger(__name__)
 class BaseEvaluator(ABC):
     def __init__(
         self,
-        client: OpenAI,
+        async_client: AsyncOpenAI,
         model: str,
         temperature: float = 0.0,
         max_tokens: int = 512,
         memory: str = "",
         instructions: str = "",
-        async_client: AsyncOpenAI = None,
         max_retries: int = 3,
         backoff_base: float = 2.0,
     ):
-        self.client = client
         self.async_client = async_client
         self.model = model
         self.temperature = temperature
@@ -44,37 +41,6 @@ class BaseEvaluator(ABC):
         if not self.instructions:
             return ""
         return f"\n--- CUSTOM EVALUATION RULES ---\n{self.instructions}\n---\n\n"
-
-    def _judge(self, system_prompt: str, user_prompt: str) -> str:
-        """Call the LLM judge with retry and accumulate token usage."""
-        last_exc = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user",   "content": user_prompt},
-                    ],
-                )
-                if response.usage:
-                    self.usage["prompt_tokens"]     += response.usage.prompt_tokens
-                    self.usage["completion_tokens"] += response.usage.completion_tokens
-                    self.usage["calls"]             += 1
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                last_exc = e
-                if attempt < self.max_retries:
-                    wait = self.backoff_base ** attempt
-                    logger.warning(
-                        f"[{self.__class__.__name__}] API call failed "
-                        f"(attempt {attempt + 1}/{self.max_retries + 1}): {e}. "
-                        f"Retrying in {wait:.1f}s..."
-                    )
-                    time.sleep(wait)
-        raise last_exc
 
     async def _async_judge(self, system_prompt: str, user_prompt: str) -> str:
         """Async LLM judge call with retry and thread-safe usage tracking."""
@@ -115,16 +81,11 @@ class BaseEvaluator(ABC):
         return dict(self.usage)
 
     @abstractmethod
-    def evaluate(self, test_case: dict) -> dict:
+    async def async_evaluate(self, test_case: dict) -> dict:
         """
         Accepts a test_case dict with keys:
           test_id, input, expected_output, context, bot_response
         Returns a dict of metric_name -> {score, reason, failure_category, method}
         All scores must be: "PASS", "FAIL", "N/A", or "ERROR"
         """
-        pass
-
-    @abstractmethod
-    async def async_evaluate(self, test_case: dict) -> dict:
-        """Async version of evaluate() for parallel execution."""
         pass

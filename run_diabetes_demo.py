@@ -22,14 +22,16 @@ Features:
 """
 
 import argparse
+import asyncio
 import csv
 import hashlib
 import json
 import os
 import sys
 import yaml
+from collections import Counter
 from datetime import datetime
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 # Framework imports
 from connectors.diabetes_bot import DiabetesBotConnector
@@ -37,7 +39,8 @@ from evaluators.quality import QualityEvaluator
 from evaluators.safety import SafetyEvaluator
 from evaluators.rag import RAGEvaluator
 from evaluators.refusal import RefusalEvaluator
-from reporter.html_reporter import generate_report
+from reporter.html_reporter import generate_report as generate_html_report
+from reporter.datatable_reporter import generate_report as generate_datatable_report
 from reporter.comparison import load_results, compare_results, generate_comparison_html
 from utils.cache import EvaluationCache
 from utils.cost import format_cost_report
@@ -177,8 +180,6 @@ def dry_run(csv_path: str, config_path: str) -> bool:
 
     if test_cases:
         # Column check
-        actual_cols = set(test_cases[0].keys()) - {"eval_types"}
-        actual_cols.add("eval_types")
         missing_cols = REQUIRED_CSV_COLUMNS - set(test_cases[0].keys())
         if missing_cols:
             print(_err(f"Missing required columns: {', '.join(sorted(missing_cols))}"))
@@ -225,8 +226,6 @@ def dry_run(csv_path: str, config_path: str) -> bool:
     # ── Test case breakdown ────────────────────────────────────
     if test_cases:
         print("\n  TEST CASE BREAKDOWN")
-        from collections import Counter
-
         et_counts = Counter(et for tc in test_cases for et in tc.get("eval_types", []))
         sev_counts = Counter(tc.get("severity", "—").strip() or "—" for tc in test_cases)
 
@@ -278,14 +277,16 @@ def dry_run(csv_path: str, config_path: str) -> bool:
 # ─────────────────────────────────────────────
 
 
-def run(
+async def run(
     csv_path: str,
     config_path: str = "config.yaml",
     cache_dir: str = "outputs/cache",
     clear_cache: bool = False,
     compare_run: str = None,
+    max_concurrency: int = 3,
+    reporter: str = "html",
 ):
-    """Run evaluation with the Diabetes Bot."""
+    """Run evaluation with the Diabetes Bot (parallel async)."""
     config = load_config(config_path)
     api_key = config["openai"]["api_key"]
     model = config["openai"]["judge_model"]
@@ -318,6 +319,7 @@ def run(
         print("📚  knowledge_base/diabetes_kb.md loaded — ready for RAG tests")
 
     client = OpenAI(api_key=api_key)
+    async_client = AsyncOpenAI(api_key=api_key)
 
     # ── Diabetes Bot ───────────────────────────────────────────
     bot = DiabetesBotConnector(
@@ -327,7 +329,7 @@ def run(
 
     # ── Evaluators ────────────────────────────────────────────
     kwargs = dict(
-        client=client,
+        async_client=async_client,
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
@@ -342,45 +344,54 @@ def run(
     }
 
     test_cases = load_test_cases(csv_path)
-    all_results = []
 
-    print(f"\n🧪  Running {len(test_cases)} diabetes test cases...\n")
+    print(f"\n🧪  Running {len(test_cases)} diabetes test cases (up to {max_concurrency} parallel)...\n")
 
-    cache_hits = 0
-    for i, tc in enumerate(test_cases, 1):
-        print(f"  [{i}/{len(test_cases)}] {tc['test_id']}: {tc['input'][:60]}...")
+    semaphore = asyncio.Semaphore(max_concurrency)
+    cache_hits_counter = [0]
+    completed_counter = [0]
+    total = len(test_cases)
 
-        # Use knowledge base as context for RAG tests
-        bot_context = knowledge_base if "rag" in tc.get("eval_types", []) else ""
-        tc["bot_response"] = bot.get_response(tc["input"], context=bot_context)
+    async def evaluate_one(tc: dict) -> dict:
+        async with semaphore:
+            print(f"  [{completed_counter[0] + 1}/{total}] Running: {tc['test_id']} ...")
+            bot_context = knowledge_base if "rag" in tc.get("eval_types", []) else ""
+            bot_response, latency_ms, bot_response_cached = await bot.async_get_response_timed_cached(
+                tc["input"], context=bot_context, cache_enabled=True, cache_dir=cache_dir
+            )
+            tc["bot_response"] = bot_response
 
-        metrics = {}
-        for eval_type in tc["eval_types"]:
-            if eval_type in evaluators:
-                # Check cache first
+            metrics = {}
+            for eval_type in tc["eval_types"]:
+                if eval_type not in evaluators:
+                    print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")
+                    continue
                 prompt_hash = _compute_prompt_hash(evaluators[eval_type], eval_type)
-                cached_result, timestamp = cache.get(tc["test_id"], eval_type, tc["bot_response"], prompt_hash)
+                cached_result, _ = cache.get(tc["test_id"], eval_type, bot_response, prompt_hash)
                 if cached_result:
-                    result = cached_result
-                    cache_hits += 1
-                    print(f"    ✓ {eval_type} (cached)")
+                    cache_hits_counter[0] += 1
+                    metrics.update(cached_result)
                 else:
-                    result = evaluators[eval_type].evaluate(tc)
-                    cache.set(tc["test_id"], eval_type, tc["bot_response"], result, prompt_hash)
-                metrics.update(result)
-            else:
-                print(f"    ⚠️   Unknown eval type: '{eval_type}' — skipping")
+                    result = await evaluators[eval_type].async_evaluate(tc)
+                    cache.set(tc["test_id"], eval_type, bot_response, result, prompt_hash)
+                    metrics.update(result)
 
-        all_results.append(
-            {
-                "test_id": tc["test_id"],
-                "input": tc["input"],
-                "bot_response": tc["bot_response"],
-                "severity": tc.get("severity", "").strip(),
-                "notes": tc.get("notes", "").strip(),
-                "metrics": metrics,
+            completed_counter[0] += 1
+            scores = {k: v["score"] for k, v in metrics.items()}
+            score_str = "  ".join(f"{k}: {v}" for k, v in scores.items())
+            print(f"  [{completed_counter[0]}/{total}] Done:    {tc['test_id']}  |  {score_str}  ({latency_ms:.0f}ms)")
+
+            return {
+                "test_id":      tc["test_id"],
+                "input":        tc["input"],
+                "bot_response": bot_response,
+                "latency_ms":   latency_ms,
+                "severity":     tc.get("severity", "").strip(),
+                "notes":        tc.get("notes", "").strip(),
+                "metrics":      metrics,
             }
-        )
+
+    all_results = await asyncio.gather(*[evaluate_one(tc) for tc in test_cases])
 
     # ── Save results as JSON ───────────────────────────────────
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -401,6 +412,7 @@ def run(
     print(f"\n💾  Results saved to: {json_path}")
 
     # ── Report ────────────────────────────────────────────────
+    generate_report = generate_datatable_report if reporter == "datatable" else generate_html_report
     report_path = generate_report(all_results, output_dir)
     print(f"✅  Report saved to: {report_path}")
 
@@ -424,6 +436,7 @@ def run(
     cost_report = format_cost_report(usage_by_evaluator, model, pricing)
     print(cost_report)
 
+    cache_hits = cache_hits_counter[0]
     if cache_hits > 0:
         print(f"💾  Cache hits: {cache_hits} (avoided {cache_hits} LLM calls)")
 
@@ -462,16 +475,23 @@ if __name__ == "__main__":
         default=None,
         help="Path to previous results JSON file for comparison report",
     )
+    parser.add_argument(
+        "--reporter",
+        default="html",
+        choices=["html", "datatable"],
+        help="Report format: 'html' (default) or 'datatable' (interactive DataTables)",
+    )
     args = parser.parse_args()
 
     if args.dry_run:
         ok = dry_run(args.csv, args.config)
         sys.exit(0 if ok else 1)
     else:
-        run(
+        asyncio.run(run(
             args.csv,
             args.config,
             cache_dir=args.cache_dir,
             clear_cache=args.clear_cache,
             compare_run=args.compare,
-        )
+            reporter=args.reporter,
+        ))

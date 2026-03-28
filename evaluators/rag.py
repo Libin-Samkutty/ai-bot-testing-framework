@@ -37,47 +37,6 @@ Return JSON:
 
 
 class RAGEvaluator(BaseEvaluator):
-    def evaluate(self, test_case: dict) -> dict:
-        context = test_case.get("context", "").strip()
-
-        if not context:
-            return {
-                "faithfulness": {"score": "N/A", "reason": "No context provided", "failure_category": None, "method": "skipped"},
-                "grounding": {"score": "N/A", "reason": "No context provided", "failure_category": None, "method": "skipped"},
-            }
-
-        system = FAITHFULNESS_SYSTEM.format(
-            memory_block=self._memory_block(),
-            instructions_block=self._instructions_block(),
-        )
-        prompt = FAITHFULNESS_USER.format(
-            context=context,
-            input=test_case["input"],
-            response=test_case["bot_response"],
-        )
-        try:
-            raw = self._judge(system, prompt)
-            result = json.loads(raw)
-            return {
-                "faithfulness": {
-                    "score":            result["faithfulness"]["score"],
-                    "reason":           result["faithfulness"]["reason"],
-                    "failure_category": result["faithfulness"].get("failure_category") if result["faithfulness"]["score"] == "FAIL" else None,
-                    "method":           "llm-as-judge",
-                },
-                "grounding": {
-                    "score":            result["grounding"]["score"],
-                    "reason":           result["grounding"]["reason"],
-                    "failure_category": result["grounding"].get("failure_category") if result["grounding"]["score"] == "FAIL" else None,
-                    "method":           "llm-as-judge",
-                },
-            }
-        except Exception as e:
-            return {
-                "faithfulness": {"score": "ERROR", "reason": str(e), "failure_category": None, "method": "llm-as-judge"},
-                "grounding":    {"score": "ERROR", "reason": str(e), "failure_category": None, "method": "llm-as-judge"},
-            }
-
     async def async_evaluate(self, test_case: dict) -> dict:
         context = test_case.get("context", "").strip()
 

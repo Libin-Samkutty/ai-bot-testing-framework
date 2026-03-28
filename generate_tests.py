@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import yaml
+from collections import Counter
 from openai import OpenAI
 
 
@@ -149,7 +150,6 @@ def generate(
         writer.writerows(test_cases)
 
     # Summary
-    from collections import Counter
     sev_counts = Counter(tc.get("severity", "Major") for tc in test_cases)
     et_counts  = Counter(
         et.strip()

@@ -648,6 +648,7 @@ Use the full path: `python run_eval.py --csv /full/path/to/test_cases.csv`
 | `--cache-dir` | Cache location (default: outputs/cache) | `--cache-dir ./my_cache` |
 | `--clear-cache` | Clear cache before running | `--clear-cache` |
 | `--compare` | Compare against previous run | `--compare outputs/results_<ts>.json` |
+| `--reporter` | HTML reporter: `default` or `datatable` (default: `default`) | `--reporter datatable` |
 
 ### `generate_tests.py` — Auto-generate test cases
 
@@ -703,15 +704,36 @@ python run_eval.py --csv test_cases/sample.csv --custom-eval-dir ./plugins --cle
 python run_eval.py --csv test_cases/sample.csv --custom-eval-dir ./plugins --compare outputs/results_baseline.json
 ```
 
+### Interactive DataTables Reporter
+
+For a richer, interactive report use `--reporter datatable`:
+
+```bash
+python run_eval.py --csv test_cases/sample.csv --reporter datatable
+```
+
+This generates `outputs/report_datatable_<timestamp>.html` powered by [DataTables.js](https://datatables.net/), with:
+
+| Feature | Description |
+|---------|-------------|
+| **Frozen header row** | Header stays visible as you scroll down the results table |
+| **Live search** | Filter any row across all columns instantly |
+| **Sortable columns** | Click any column header to sort |
+| **Column visibility** | Toggle metric columns on/off via the "Column visibility" button |
+| **Pagination** | 25 rows per page by default |
+
+> **Note:** The DataTables report loads CSS and JS from CDN, so an internet connection is required when opening the HTML file in a browser. The default reporter (`--reporter default`) produces a fully self-contained file with no external dependencies.
+
 ### Output Files
 
 ```
 outputs/
-  ├── report_20260305_120000.html           # Main report (open in browser)
-  ├── results_20260305_120000.json          # Results data (for --compare)
-  ├── comparison_20260305_120500.html       # Comparison report (if --compare used)
+  ├── report_<timestamp>.html               # Default report (self-contained, open in browser)
+  ├── report_datatable_<timestamp>.html     # DataTables report (requires internet, --reporter datatable)
+  ├── results_<timestamp>.json             # Results data (for --compare)
+  ├── comparison_<timestamp>.html          # Comparison report (if --compare used)
   └── cache/
-      └── evaluation_cache.json             # Cached evaluations (in-memory during run, flushed at end)
+      └── evaluation_cache.json            # Cached evaluations (in-memory during run, flushed at end)
 ```
 
 ---
