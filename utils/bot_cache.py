@@ -1,5 +1,5 @@
 """
-Evaluation result caching to avoid re-running identical evaluations.
+Bot response caching to avoid re-calling the bot API for identical inputs.
 """
 import json
 import hashlib
@@ -8,17 +8,17 @@ from datetime import datetime
 from pathlib import Path
 
 
-class EvaluationCache:
-    """Simple file-based cache for evaluation results."""
+class BotResponseCache:
+    """Simple file-based cache for bot responses."""
 
     def __init__(self, cache_dir: str = "outputs/cache"):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_file = self.cache_dir / "evaluation_cache.json"
+        self.cache_file = self.cache_dir / "bot_response_cache.json"
 
-    def _make_key(self, test_id: str, eval_type: str, bot_response: str, prompt_hash: str) -> str:
-        """Create cache key from test components + prompt hash."""
-        content = f"{test_id}|{eval_type}|{bot_response}|{prompt_hash}"
+    def _make_key(self, user_input: str, context: str, model_params: dict, system_prompt: str) -> str:
+        """Create cache key from bot call components."""
+        content = f"{user_input}|{context}|{json.dumps(model_params, sort_keys=True)}|{system_prompt}"
         return hashlib.sha256(content.encode()).hexdigest()
 
     def _load_cache(self) -> dict:
@@ -37,27 +37,23 @@ class EvaluationCache:
             with open(self.cache_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except IOError as e:
-            print(f"Warning: Failed to save cache: {e}")
+            print(f"Warning: Failed to save bot cache: {e}")
 
-    def get(self, test_id: str, eval_type: str, bot_response: str, prompt_hash: str) -> dict | None:
-        """Retrieve cached result if exists."""
-        key = self._make_key(test_id, eval_type, bot_response, prompt_hash)
+    def get(self, user_input: str, context: str, model_params: dict, system_prompt: str) -> str | None:
+        """Retrieve cached bot response if exists. Returns response string or None."""
+        key = self._make_key(user_input, context, model_params, system_prompt)
         cache = self._load_cache()
         if key in cache:
-            cached = cache[key]
-            # Return result and metadata
-            return cached.get("result"), cached.get("timestamp")
-        return None, None
+            return cache[key].get("response")
+        return None
 
-    def set(self, test_id: str, eval_type: str, bot_response: str, result: dict, prompt_hash: str) -> None:
-        """Store evaluation result in cache."""
-        key = self._make_key(test_id, eval_type, bot_response, prompt_hash)
+    def set(self, user_input: str, context: str, model_params: dict, response: str, system_prompt: str) -> None:
+        """Store bot response in cache."""
+        key = self._make_key(user_input, context, model_params, system_prompt)
         cache = self._load_cache()
         cache[key] = {
-            "test_id": test_id,
-            "eval_type": eval_type,
-            "result": result,
-            "prompt_hash": prompt_hash,
+            "response": response,
+            "model_params": model_params,
             "timestamp": datetime.now().isoformat(),
         }
         self._save_cache(cache)
@@ -66,7 +62,7 @@ class EvaluationCache:
         """Clear entire cache."""
         if self.cache_file.exists():
             self.cache_file.unlink()
-            print("✓ Cache cleared")
+            print("✓ Bot response cache cleared")
 
     def stats(self) -> dict:
         """Get cache statistics."""
