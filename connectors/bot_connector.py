@@ -15,7 +15,7 @@ class BotConnector(ABC):
     async def async_get_response(self, user_input: str, context: str = "") -> str:
         """Async version of get_response(). Override in subclass for true async support."""
         # Default: run sync get_response in thread pool to avoid blocking
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.get_response, user_input, context)
 
     def get_response_timed(self, user_input: str, context: str = "") -> tuple:
