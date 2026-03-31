@@ -1,0 +1,18 @@
+# Default report configuration
+# Base settings for standard LLM evaluation reports
+
+title: "LLM Evaluation Report"
+title_icon: ""
+description: ""
+
+# Column visibility
+show_expected_output: false      # Hide expected output column
+show_notes_full: false           # Show notes as tooltip icon only
+show_latency: true               # Show latency column
+show_severity: true              # Show severity column
+
+# Color theme (empty = use defaults from styles.py)
+colors: {}
+
+# Font theme (empty = use defaults from styles.py)
+fonts: {}
